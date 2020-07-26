@@ -1,5 +1,11 @@
 use rand::prelude::*;
 
+#[derive(Debug, PartialEq)]
+pub enum Binary {
+    Zero,
+    One,
+}
+
 /// Representation of a qubit.
 #[derive(Debug, PartialEq)]
 pub struct Qubit(f64, f64);
@@ -34,23 +40,33 @@ pub mod ops {
 
     /// Quantum READ operator. Returns a random result with probability based on the
     /// magnitudes.
-    pub fn read(q: &mut Qubit) -> u8 {
+    pub fn read(q: &mut Qubit) -> Binary {
         let measurement: f64 = thread_rng().gen();
         read_deterministic(q, measurement)
     }
 
-    fn read_deterministic(q: &mut Qubit, measurement: f64) -> u8 {
+    fn read_deterministic(q: &mut Qubit, measurement: f64) -> Binary {
         if measurement < q.0.powi(2) {
             q.0 = 1.0;
             q.1 = 0.0;
 
-            0_u8
+            Binary::Zero
         } else {
             q.0 = 0.0;
             q.1 = 1.0;
 
-            1_u8
+            Binary::One
         }
+    }
+
+    /// Quantum WRITE operator. Deterministically sets the values of a qubit.
+    pub fn write(target: &mut Qubit, value: Binary) {
+        let mut q = match value {
+            Binary::Zero => Qubit::zero(),
+            Binary::One => Qubit::one(),
+        };
+
+        swap(target, &mut q);
     }
 
     #[cfg(test)]
@@ -80,11 +96,18 @@ pub mod ops {
             let mut q = Qubit::zero();
             ops::had(&mut q);
             let res = ops::read_deterministic(&mut q, 0.49);
-            assert_eq!(res, 0);
+            assert_eq!(res, Binary::Zero);
 
             ops::had(&mut q);
             let res = ops::read_deterministic(&mut q, 0.51);
-            assert_eq!(res, 1);
+            assert_eq!(res, Binary::One);
+        }
+
+        #[test]
+        fn write() {
+            let mut q = Qubit::one();
+            ops::write(&mut q, Binary::Zero);
+            assert_eq!(q, Qubit::zero());
         }
     }
 }
