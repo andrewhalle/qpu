@@ -1,6 +1,6 @@
 use super::qubit::Qubit;
 use super::*;
-use num::FromPrimitive;
+use num::{Complex, FromPrimitive};
 use rand::prelude::*;
 use std::f64::consts::*;
 use std::mem::swap;
@@ -58,12 +58,16 @@ impl QuantumComputer {
 
         swap(&mut self.q, &mut q);
     }
+
+    /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>.
+    pub fn phase(&mut self, angle: f64) {
+        self.q.1 = (Complex::i() * angle).exp() * self.q.1;
+    }
 }
 
 #[cfg(test)]
 mod qc_tests {
     use super::*;
-    use num::FromPrimitive;
 
     #[test]
     fn not() {
@@ -110,8 +114,34 @@ mod qc_tests {
 
     #[test]
     fn write() {
-        let mut qc = QuantumComputer::reset(0);
+        let mut qc = QuantumComputer::reset(1);
         qc.write(Binary::One);
         assert_eq!(qc.q, Qubit::one());
+    }
+
+    #[test]
+    fn phase() {
+        let mut qc = QuantumComputer::reset(1);
+        qc.had();
+        qc.phase(FRAC_PI_4);
+        assert_eq!(qc.read_deterministic(0.49), Binary::Zero);
+
+        let mut qc = QuantumComputer::reset(1);
+        qc.had();
+        qc.phase(FRAC_PI_4);
+        assert_eq!(qc.read_deterministic(0.51), Binary::One);
+
+        let mut qc = QuantumComputer::reset(1);
+        qc.had();
+        qc.phase(FRAC_PI_4);
+
+        assert_eq!(
+            qc.q,
+            Qubit(
+                FromPrimitive::from_f64(FRAC_1_SQRT_2).unwrap(),
+                (Complex::i() * FRAC_PI_4).exp()
+                    * <Complex<f64> as FromPrimitive>::from_f64(FRAC_1_SQRT_2).unwrap()
+            )
+        );
     }
 }
