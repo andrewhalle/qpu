@@ -1,5 +1,6 @@
 use super::qubit::Qubit;
 use super::*;
+use num::FromPrimitive;
 use rand::prelude::*;
 use std::f64::consts::*;
 use std::mem::swap;
@@ -35,14 +36,14 @@ impl QuantumComputer {
     }
 
     fn read_deterministic(&mut self, measurement: f64) -> Binary {
-        if measurement < self.q.0.powi(2) {
-            self.q.0 = 1.0;
-            self.q.1 = 0.0;
+        if measurement < self.q.0.norm_sqr() {
+            self.q.0 = FromPrimitive::from_f64(1.0).unwrap();
+            self.q.1 = FromPrimitive::from_f64(0.0).unwrap();
 
             Binary::Zero
         } else {
-            self.q.0 = 0.0;
-            self.q.1 = 1.0;
+            self.q.0 = FromPrimitive::from_f64(0.0).unwrap();
+            self.q.1 = FromPrimitive::from_f64(1.0).unwrap();
 
             Binary::One
         }
@@ -62,6 +63,7 @@ impl QuantumComputer {
 #[cfg(test)]
 mod qc_tests {
     use super::*;
+    use num::FromPrimitive;
 
     #[test]
     fn not() {
@@ -74,12 +76,24 @@ mod qc_tests {
     fn had() {
         let mut qc = QuantumComputer::reset(1);
         qc.had();
-        assert_eq!(qc.q, Qubit(FRAC_1_SQRT_2, FRAC_1_SQRT_2));
+        assert_eq!(
+            qc.q,
+            Qubit(
+                FromPrimitive::from_f64(FRAC_1_SQRT_2).unwrap(),
+                FromPrimitive::from_f64(FRAC_1_SQRT_2).unwrap()
+            )
+        );
 
         qc = QuantumComputer::reset(1);
         qc.write(Binary::One);
         qc.had();
-        assert_eq!(qc.q, Qubit(FRAC_1_SQRT_2, -FRAC_1_SQRT_2));
+        assert_eq!(
+            qc.q,
+            Qubit(
+                FromPrimitive::from_f64(FRAC_1_SQRT_2).unwrap(),
+                FromPrimitive::from_f64(-FRAC_1_SQRT_2).unwrap()
+            )
+        );
     }
 
     #[test]
