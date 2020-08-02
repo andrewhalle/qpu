@@ -5,6 +5,13 @@ use rand::prelude::*;
 use std::f64::consts::*;
 use std::mem::swap;
 
+mod helpers {
+    pub fn half_angle_factors(angle: f64) -> (f64, f64) {
+        let half_angle = angle / 2.0;
+        (half_angle.cos(), half_angle.sin())
+    }
+}
+
 /// An quantum computer prepared with a single qubit.
 pub struct QuantumComputer {
     q: Qubit,
@@ -62,6 +69,30 @@ impl QuantumComputer {
     /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>.
     pub fn phase(&mut self, angle: f64) {
         self.q.1 = (Complex::i() * angle).exp() * self.q.1;
+    }
+
+    /// Quantum ROTX operator. Rotates in the X plane of the Bloch sphere.
+    pub fn rotx(&mut self, angle: f64) {
+        let (f1, f2) = helpers::half_angle_factors(angle);
+
+        let tmp = self.q.0;
+        self.q.0 = (f1 * self.q.0) + (-Complex::i() * f2 * self.q.1);
+        self.q.1 = (-Complex::i() * f2 * tmp) + (f1 * self.q.1);
+
+        self.q.0 *= Complex::i();
+        self.q.1 *= Complex::i();
+    }
+
+    /// Quantum ROTY operator. Rotates in the Y plane of the Bloch sphere.
+    pub fn roty(&mut self, angle: f64) {
+        let (f1, f2) = helpers::half_angle_factors(angle);
+
+        let tmp = self.q.0;
+        self.q.0 = (f1 * self.q.0) + (-f2 * self.q.1);
+        self.q.1 = (f2 * tmp) + (f1 * self.q.1);
+
+        self.q.0 *= Complex::i();
+        self.q.1 *= Complex::i();
     }
 }
 
@@ -143,5 +174,19 @@ mod qc_tests {
                     * <Complex<f64> as FromPrimitive>::from_f64(FRAC_1_SQRT_2).unwrap()
             )
         );
+    }
+
+    #[test]
+    fn rotx() {
+        let mut qc = QuantumComputer::reset(1);
+        qc.rotx(PI);
+        assert_eq!(qc.q, Qubit::one());
+    }
+
+    #[test]
+    fn roty() {
+        let mut qc = QuantumComputer::reset(1);
+        qc.roty(PI);
+        assert_eq!(qc.q, Qubit(Complex::new(0.0, 0.0), Complex::new(0.0, 1.0)));
     }
 }
