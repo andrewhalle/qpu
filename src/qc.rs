@@ -94,6 +94,13 @@ impl QuantumComputer {
         self.q.0 *= Complex::i();
         self.q.1 *= Complex::i();
     }
+
+    /// Quantum ROOT-of-NOT operator. Two applications should equal a NOT.
+    pub fn root_of_not(&mut self) {
+        self.had();
+        self.phase(-FRAC_PI_2);
+        self.had();
+    }
 }
 
 #[cfg(test)]
@@ -188,5 +195,13 @@ mod qc_tests {
         let mut qc = QuantumComputer::reset(1);
         qc.roty(PI);
         assert_eq!(qc.q, Qubit(Complex::new(0.0, 0.0), Complex::new(0.0, 1.0)));
+    }
+
+    #[test]
+    fn root_of_not() {
+        let mut qc = QuantumComputer::reset(1);
+        qc.root_of_not();
+        qc.root_of_not();
+        assert_eq!(qc.q, Qubit::one());
     }
 }
