@@ -3,7 +3,7 @@ use num::complex::Complex64;
 use num::FromPrimitive;
 
 /// Representation of a qubit.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Qubit(pub Complex64, pub Complex64);
 
 impl Qubit {

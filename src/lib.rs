@@ -15,7 +15,17 @@ impl Display for Binary {
     }
 }
 
+impl Binary {
+    pub fn is_one(&self) -> bool {
+        match self {
+            Binary::Zero => false,
+            Binary::One => true,
+        }
+    }
+}
+
 mod qc;
+mod qint;
 mod qubit;
 
 pub use qc::QuantumComputer;

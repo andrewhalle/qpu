@@ -14,25 +14,37 @@ mod helpers {
 
 /// An quantum computer prepared with a single qubit.
 pub struct QuantumComputer {
-    q: Qubit,
+    qs: Vec<Qubit>,
 }
 
 impl QuantumComputer {
-    /// Initialize the quantum computer with a zero qubit.
-    pub fn reset(_n: u8) -> Self {
-        QuantumComputer { q: Qubit::zero() }
+    /// Initialize the quantum computer with n qubits, all zero.
+    pub fn reset(n: u8) -> Self {
+        QuantumComputer {
+            qs: vec![Qubit::zero(); n.into()],
+        }
     }
 
-    /// Quantum NOT operator.
+    /// Start a label block (for the circuit diagram).
+    pub fn label(&mut self, _msg: &str) {}
+
+    /// End a label block (for the circuit diagram).
+    pub fn end_label(&mut self) {}
+
+    /// Quantum NOT operator. Applies to all qubits in the quantum computer.
     pub fn not(&mut self) {
-        swap(&mut self.q.0, &mut self.q.1);
+        for q in self.qs.iter_mut() {
+            swap(&mut q.0, &mut q.1);
+        }
     }
 
-    /// Quantum HAD operator (Hadamard gate).
+    /// Quantum HAD operator (Hadamard gate). Applies to all qubits in the quantum computer.
     pub fn had(&mut self) {
-        let tmp = self.q.0;
-        self.q.0 = FRAC_1_SQRT_2 * (self.q.0 + self.q.1);
-        self.q.1 = FRAC_1_SQRT_2 * (tmp - self.q.1);
+        for q in self.qs.iter_mut() {
+            let tmp = q.0;
+            q.0 = FRAC_1_SQRT_2 * (q.0 + q.1);
+            q.1 = FRAC_1_SQRT_2 * (tmp - q.1);
+        }
     }
 
     /// Quantum READ operator. Returns a random result with probability based on the
