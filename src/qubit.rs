@@ -18,15 +18,6 @@ impl Display for Binary {
     }
 }
 
-impl Binary {
-    pub fn is_one(&self) -> bool {
-        match self {
-            Binary::Zero => false,
-            Binary::One => true,
-        }
-    }
-}
-
 /// Representation of a qubit.
 #[derive(Debug, Clone)]
 pub struct Qubit(pub Complex64, pub Complex64);

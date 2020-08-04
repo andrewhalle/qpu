@@ -2,6 +2,7 @@ use super::qubit::{Qubit, Binary};
 use rand::prelude::*;
 use std::f64::consts::*;
 use std::mem::swap;
+use num::Complex;
 
 mod helpers {
     use super::*;
@@ -76,7 +77,8 @@ impl QuantumComputer {
         res
     }
 
-    /// Quantum WRITE operator. Deterministically sets the values of a qubit.
+    /// Quantum WRITE operator. Deterministically sets the values of a qubit based on `value`.
+    /// Applies to the qubits specified by `target`.
     pub fn write(&mut self, value: usize, target: usize) {
         helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, curr| {
             let mut new = if value & curr != 0 {
@@ -89,49 +91,56 @@ impl QuantumComputer {
         });
     }
 
-    /*
-    /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>.
-    pub fn phase(&mut self, angle: f64) {
-        self.q.1 = (Complex::i() * angle).exp() * self.q.1;
+    /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>. Applies to the qubits specified by
+    /// `target`.
+    pub fn phase(&mut self, angle: f64, target: usize) {
+        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
+            q.1 = (Complex::i() * angle).exp() * q.1;
+        });
     }
 
-    /// Quantum ROTX operator. Rotates in the X plane of the Bloch sphere.
-    pub fn rotx(&mut self, angle: f64) {
+    /// Quantum ROTX operator. Rotates in the X plane of the Bloch sphere. Applies to the qubits
+    /// specified by `target`.
+    pub fn rotx(&mut self, angle: f64, target: usize) {
         let (f1, f2) = helpers::half_angle_factors(angle);
 
-        let tmp = self.q.0;
-        self.q.0 = (f1 * self.q.0) + (-Complex::i() * f2 * self.q.1);
-        self.q.1 = (-Complex::i() * f2 * tmp) + (f1 * self.q.1);
+        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
+            let tmp = q.0;
+            q.0 = (f1 * q.0) + (-Complex::i() * f2 * q.1);
+            q.1 = (-Complex::i() * f2 * tmp) + (f1 * q.1);
 
-        self.q.0 *= Complex::i();
-        self.q.1 *= Complex::i();
+            q.0 *= Complex::i();
+            q.1 *= Complex::i();
+        });
     }
 
-    /// Quantum ROTY operator. Rotates in the Y plane of the Bloch sphere.
-    pub fn roty(&mut self, angle: f64) {
+    /// Quantum ROTY operator. Rotates in the Y plane of the Bloch sphere. Applies to the qubits
+    /// specified by `target`.
+    pub fn roty(&mut self, angle: f64, target: usize) {
         let (f1, f2) = helpers::half_angle_factors(angle);
 
-        let tmp = self.q.0;
-        self.q.0 = (f1 * self.q.0) + (-f2 * self.q.1);
-        self.q.1 = (f2 * tmp) + (f1 * self.q.1);
+        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
+            let tmp = q.0;
+            q.0 = (f1 * q.0) + (-f2 * q.1);
+            q.1 = (f2 * tmp) + (f1 * q.1);
 
-        self.q.0 *= Complex::i();
-        self.q.1 *= Complex::i();
+            q.0 *= Complex::i();
+            q.1 *= Complex::i();
+        });
     }
 
-    /// Quantum ROOT-of-NOT operator. Two applications should equal a NOT.
-    pub fn root_of_not(&mut self) {
-        self.had();
-        self.phase(-FRAC_PI_2);
-        self.had();
+    /// Quantum ROOT-of-NOT operator. Two applications should equal a NOT. Applies to all qubits
+    /// specified by `target`.
+    pub fn root_of_not(&mut self, target: usize) {
+        self.had(target);
+        self.phase(-FRAC_PI_2, target);
+        self.had(target);
     }
-    */
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num::Complex;
 
     #[test]
     fn not() {
@@ -184,31 +193,33 @@ mod tests {
         let mut qc = QuantumComputer::reset(4);
         qc.write(0b1010, 0b11);
         assert_eq!(qc.read(0b1111), 2);
+
+        let mut qc = QuantumComputer::reset(4);
+        qc.write(0b1010, 0b1100);
+        assert_eq!(qc.read(0b1111), 8);
     }
 
-    /*
     #[test]
     fn phase() {
         let mut qc = QuantumComputer::reset(1);
-        qc.had();
-        qc.phase(FRAC_PI_4);
-        assert_eq!(qc.read_deterministic(0.49), Binary::Zero);
+        qc.had(0b1);
+        qc.phase(FRAC_PI_4, 0b1);
+        assert_eq!(qc.qs[0].read(0.49), Binary::Zero);
 
         let mut qc = QuantumComputer::reset(1);
-        qc.had();
-        qc.phase(FRAC_PI_4);
-        assert_eq!(qc.read_deterministic(0.51), Binary::One);
+        qc.had(0b1);
+        qc.phase(FRAC_PI_4, 0b1);
+        assert_eq!(qc.qs[0].read(0.51), Binary::One);
 
         let mut qc = QuantumComputer::reset(1);
-        qc.had();
-        qc.phase(FRAC_PI_4);
+        qc.had(0b1);
+        qc.phase(FRAC_PI_4, 0b1);
 
         assert_eq!(
-            qc.q,
+            qc.qs[0],
             Qubit(
-                FromPrimitive::from_f64(FRAC_1_SQRT_2).unwrap(),
-                (Complex::i() * FRAC_PI_4).exp()
-                    * <Complex<f64> as FromPrimitive>::from_f64(FRAC_1_SQRT_2).unwrap()
+                Complex::new(FRAC_1_SQRT_2, 0.0),
+                (Complex::i() * FRAC_PI_4).exp() * Complex::new(FRAC_1_SQRT_2, 0.0)
             )
         );
     }
@@ -216,23 +227,22 @@ mod tests {
     #[test]
     fn rotx() {
         let mut qc = QuantumComputer::reset(1);
-        qc.rotx(PI);
-        assert_eq!(qc.q, Qubit::one());
+        qc.rotx(PI, 0b1);
+        assert_eq!(qc.qs[0], Qubit::one());
     }
 
     #[test]
     fn roty() {
         let mut qc = QuantumComputer::reset(1);
-        qc.roty(PI);
-        assert_eq!(qc.q, Qubit(Complex::new(0.0, 0.0), Complex::new(0.0, 1.0)));
+        qc.roty(PI, 0b1);
+        assert_eq!(qc.qs[0], Qubit(Complex::new(0.0, 0.0), Complex::new(0.0, 1.0)));
     }
 
     #[test]
     fn root_of_not() {
         let mut qc = QuantumComputer::reset(1);
-        qc.root_of_not();
-        qc.root_of_not();
-        assert_eq!(qc.q, Qubit::one());
+        qc.root_of_not(0b1);
+        qc.root_of_not(0b1);
+        assert_eq!(qc.qs[0], Qubit::one());
     }
-    */
 }
