@@ -1,3 +1,4 @@
+/*
 // Ex 2-4: Quantum Spy Hunter
 use qpu::{Binary, QuantumComputer};
 
@@ -82,4 +83,6 @@ fn run_spy_hunter_protocol() -> bool {
     false
 }
 
+fn main() {}
+*/
 fn main() {}

@@ -1,14 +1,26 @@
-use super::qubit::Qubit;
-use super::*;
-use num::{Complex, FromPrimitive};
+use super::qubit::{Qubit, Binary};
 use rand::prelude::*;
 use std::f64::consts::*;
 use std::mem::swap;
 
 mod helpers {
+    use super::*;
+    use std::slice::IterMut;
+
     pub fn half_angle_factors(angle: f64) -> (f64, f64) {
         let half_angle = angle / 2.0;
         (half_angle.cos(), half_angle.sin())
+    }
+
+    pub fn bitmask_for_each<F: FnMut(&mut Qubit, usize)>(mask: usize, iterator: IterMut<Qubit>, mut f: F) {
+        let mut curr = 1_usize;
+        for q in iterator {
+            if mask & curr != 0 {
+                f(q, curr);
+            }
+
+            curr <<= 1;
+        }
     }
 }
 
@@ -31,53 +43,53 @@ impl QuantumComputer {
     /// End a label block (for the circuit diagram).
     pub fn end_label(&mut self) {}
 
-    /// Quantum NOT operator. Applies to all qubits in the quantum computer.
-    pub fn not(&mut self) {
-        for q in self.qs.iter_mut() {
+    /// Quantum NOT operator. Applies to all qubits identified by the mask `target`.
+    pub fn not(&mut self, target: usize) {
+        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
             swap(&mut q.0, &mut q.1);
-        }
+        });
     }
 
-    /// Quantum HAD operator (Hadamard gate). Applies to all qubits in the quantum computer.
-    pub fn had(&mut self) {
-        for q in self.qs.iter_mut() {
+    /// Quantum HAD operator (Hadamard gate). Applies to all qubits identified by the mask
+    /// `target`.
+    pub fn had(&mut self, target: usize) {
+        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
             let tmp = q.0;
             q.0 = FRAC_1_SQRT_2 * (q.0 + q.1);
             q.1 = FRAC_1_SQRT_2 * (tmp - q.1);
-        }
+        });
     }
 
     /// Quantum READ operator. Returns a random result with probability based on the
-    /// magnitudes.
-    pub fn read(&mut self) -> Binary {
-        let measurement: f64 = thread_rng().gen();
-        self.read_deterministic(measurement)
-    }
+    /// magnitudes. Applies to all qubits identified by the mask `target`.
+    pub fn read(&mut self, target: usize) -> usize {
+        let mut rng = thread_rng();
+        let mut res = 0;
 
-    fn read_deterministic(&mut self, measurement: f64) -> Binary {
-        if measurement < self.q.0.norm_sqr() {
-            self.q.0 = FromPrimitive::from_f64(1.0).unwrap();
-            self.q.1 = FromPrimitive::from_f64(0.0).unwrap();
+        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, curr| {
+            let measurement = rng.gen();
+            if let Binary::One = q.read(measurement) {
+                res |= curr;
+            }
+        });
 
-            Binary::Zero
-        } else {
-            self.q.0 = FromPrimitive::from_f64(0.0).unwrap();
-            self.q.1 = FromPrimitive::from_f64(1.0).unwrap();
-
-            Binary::One
-        }
+        res
     }
 
     /// Quantum WRITE operator. Deterministically sets the values of a qubit.
-    pub fn write(&mut self, value: Binary) {
-        let mut q = match value {
-            Binary::Zero => Qubit::zero(),
-            Binary::One => Qubit::one(),
-        };
+    pub fn write(&mut self, value: usize, target: usize) {
+        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, curr| {
+            let mut new = if value & curr != 0 {
+                Qubit::one()
+            } else {
+                Qubit::zero()
+            };
 
-        swap(&mut self.q, &mut q);
+            swap(q, &mut new);
+        });
     }
 
+    /*
     /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>.
     pub fn phase(&mut self, angle: f64) {
         self.q.1 = (Complex::i() * angle).exp() * self.q.1;
@@ -113,62 +125,68 @@ impl QuantumComputer {
         self.phase(-FRAC_PI_2);
         self.had();
     }
+    */
 }
 
 #[cfg(test)]
-mod qc_tests {
+mod tests {
     use super::*;
+    use num::Complex;
 
     #[test]
     fn not() {
         let mut qc = QuantumComputer::reset(1);
-        qc.not();
-        assert_eq!(qc.q, Qubit::one());
+        qc.not(0b1);
+        assert_eq!(qc.qs[0], Qubit::one());
     }
 
     #[test]
     fn had() {
         let mut qc = QuantumComputer::reset(1);
-        qc.had();
+        qc.had(0b1);
         assert_eq!(
-            qc.q,
+            qc.qs[0],
             Qubit(
-                FromPrimitive::from_f64(FRAC_1_SQRT_2).unwrap(),
-                FromPrimitive::from_f64(FRAC_1_SQRT_2).unwrap()
+                Complex::new(FRAC_1_SQRT_2, 0.0),
+                Complex::new(FRAC_1_SQRT_2, 0.0),
             )
         );
 
         qc = QuantumComputer::reset(1);
-        qc.write(Binary::One);
-        qc.had();
+        qc.not(0b1);
+        qc.had(0b1);
         assert_eq!(
-            qc.q,
+            qc.qs[0],
             Qubit(
-                FromPrimitive::from_f64(FRAC_1_SQRT_2).unwrap(),
-                FromPrimitive::from_f64(-FRAC_1_SQRT_2).unwrap()
+                Complex::new(FRAC_1_SQRT_2, 0.0),
+                Complex::new(-FRAC_1_SQRT_2, 0.0),
             )
         );
     }
 
     #[test]
-    fn read_deterministic() {
-        let mut qc = QuantumComputer::reset(1);
-        qc.had();
-        let res = qc.read_deterministic(0.49);
-        assert_eq!(res, Binary::Zero);
-
-        qc.had();
-        let res = qc.read_deterministic(0.51);
-        assert_eq!(res, Binary::One);
+    fn read() {
+        let mut qc = QuantumComputer::reset(4);
+        qc.not(0b1010);
+        assert_eq!(qc.read(0b1111), 10);
     }
 
     #[test]
     fn write() {
         let mut qc = QuantumComputer::reset(1);
-        qc.write(Binary::One);
-        assert_eq!(qc.q, Qubit::one());
+        qc.write(0x1, 0x1);
+        assert_eq!(qc.qs[0], Qubit::one());
+
+        let mut qc = QuantumComputer::reset(4);
+        qc.write(0b1010, 0b1111);
+        assert_eq!(qc.read(0b1111), 10);
+
+        let mut qc = QuantumComputer::reset(4);
+        qc.write(0b1010, 0b11);
+        assert_eq!(qc.read(0b1111), 2);
     }
 
+    /*
     #[test]
     fn phase() {
         let mut qc = QuantumComputer::reset(1);
@@ -216,4 +234,5 @@ mod qc_tests {
         qc.root_of_not();
         assert_eq!(qc.q, Qubit::one());
     }
+    */
 }

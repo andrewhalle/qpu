@@ -1,3 +1,4 @@
+/*
 use qpu::{Binary, QuantumComputer};
 
 fn main() {
@@ -6,3 +7,5 @@ fn main() {
     qc.had();
     println!("{}", qc.read());
 }
+*/
+fn main() {}

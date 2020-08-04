@@ -1,6 +1,31 @@
 use approx::abs_diff_eq;
 use num::complex::Complex64;
-use num::FromPrimitive;
+use num::Complex;
+use std::fmt::{Formatter, Display};
+
+#[derive(Debug, PartialEq)]
+pub enum Binary {
+    Zero,
+    One,
+}
+
+impl Display for Binary {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        match self {
+            Binary::Zero => write!(f, "0"),
+            Binary::One => write!(f, "1"),
+        }
+    }
+}
+
+impl Binary {
+    pub fn is_one(&self) -> bool {
+        match self {
+            Binary::Zero => false,
+            Binary::One => true,
+        }
+    }
+}
 
 /// Representation of a qubit.
 #[derive(Debug, Clone)]
@@ -9,16 +34,31 @@ pub struct Qubit(pub Complex64, pub Complex64);
 impl Qubit {
     pub fn zero() -> Self {
         Qubit(
-            FromPrimitive::from_f64(1.0).unwrap(),
-            FromPrimitive::from_f64(0.0).unwrap(),
+            Complex::new(1.0, 0.0),
+            Complex::new(0.0, 0.0),
         )
     }
 
     pub fn one() -> Self {
         Qubit(
-            FromPrimitive::from_f64(0.0).unwrap(),
-            FromPrimitive::from_f64(1.0).unwrap(),
+            Complex::new(0.0, 0.0),
+            Complex::new(1.0, 0.0),
         )
+    }
+
+    pub fn read(&mut self, measurement: f64) -> Binary {
+        if measurement < self.0.norm_sqr() {
+            self.0 = Complex::new(1.0, 0.0);
+            self.1 = Complex::new(0.0, 0.0);
+
+            Binary::Zero
+        } else {
+            self.0 = Complex::new(0.0, 0.0);
+            self.1 = Complex::new(1.0, 0.0);
+
+            Binary::One
+        }
+
     }
 }
 
@@ -34,12 +74,30 @@ impl PartialEq for Qubit {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::f64::consts::FRAC_1_SQRT_2;
 
     #[test]
     fn init_qubits() {
-        assert_eq!(Qubit::zero().0, FromPrimitive::from_f64(1.0).unwrap());
-        assert_eq!(Qubit::zero().1, FromPrimitive::from_f64(0.0).unwrap());
-        assert_eq!(Qubit::one().0, FromPrimitive::from_f64(0.0).unwrap());
-        assert_eq!(Qubit::one().1, FromPrimitive::from_f64(1.0).unwrap());
+        assert_eq!(Qubit::zero().0, Complex::new(1.0, 0.0));
+        assert_eq!(Qubit::zero().1, Complex::new(0.0, 0.0));
+        assert_eq!(Qubit::one().0, Complex::new(0.0, 0.0));
+        assert_eq!(Qubit::one().1, Complex::new(1.0, 0.0));
+    }
+
+    #[test]
+    fn read() {
+        let mut q = Qubit(
+            Complex::new(FRAC_1_SQRT_2, 0.0),
+            Complex::new(FRAC_1_SQRT_2, 0.0),
+        );
+
+        assert_eq!(q.read(0.49), Binary::Zero);
+
+        let mut q = Qubit(
+            Complex::new(FRAC_1_SQRT_2, 0.0),
+            Complex::new(FRAC_1_SQRT_2, 0.0),
+        );
+
+        assert_eq!(q.read(0.51), Binary::One);
     }
 }
