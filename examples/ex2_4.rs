@@ -1,73 +1,74 @@
-/*
 // Ex 2-4: Quantum Spy Hunter
-use qpu::{Binary, QuantumComputer};
+use qpu::{QuantumComputer, QubitTarget};
 
-fn get_random_bit(q: &mut QInt) -> Binary {
-    q.write(0);
-    q.had();
+fn get_random_bit<T: Into<QubitTarget>>(qc: &mut QuantumComputer, target: T) -> usize {
+    let target = target.into();
 
-    q.read()
+    qc.write(0, target);
+    qc.had(target);
+
+    qc.read(target)
 }
 
 // Runs the spy hunter protocol. Returns true if a spy is caught.
 fn run_spy_hunter_protocol() -> bool {
     let mut qc = QuantumComputer::reset(3);
 
-    let mut a = qc.qint(1, "alice");
-    let mut fiber = qc.qint(1, "fiber");
-    let mut b = qc.qint(1, "bob");
+    let a = qc.qint(1, "alice");
+    let fiber = qc.qint(1, "fiber");
+    let b = qc.qint(1, "bob");
 
     qc.label("Generate two random bits.");
-    let send_had = get_random_bit(&mut a);
-    let send_value = get_random_bit(&mut a);
+    let send_had = get_random_bit(&mut qc, a);
+    let send_value = get_random_bit(&mut qc, a);
 
-    let spy_is_present = get_random_bit(&mut fiber);
+    let spy_is_present = get_random_bit(&mut qc, fiber);
 
-    let recv_had = get_random_bit(&mut b);
+    let recv_had = get_random_bit(&mut qc, b);
 
     // Prepare Alice's qubit.
-    a.write(0);
+    qc.write(0, a);
     qc.label("set value");
-    if send_value.is_one() {
-        a.not();
+    if send_value == 1 {
+        qc.not(a);
     }
     qc.end_label();
 
     qc.label("apply had");
-    if send_had.is_one() {
-        a.had();
+    if send_had == 1 {
+        qc.had(a);
     }
     qc.end_label();
 
     // Send the qubit!
-    fiber.exchange(a);
+    qc.exchange(a, fiber);
 
     // Activate the spy
-    if spy_is_present.is_one() {
+    if spy_is_present == 1 {
         qc.label("spy");
-        fiber.had();
+        qc.had(fiber);
 
-        let stolen_data = fiber.read();
+        let stolen_data = qc.read(fiber);
 
-        fiber.write(0);
-        if stolen_data.is_one() {
-            fiber.not();
+        qc.write(0, fiber);
+        if stolen_data == 1 {
+            qc.not(fiber);
         }
-        fiber.had();
+        qc.had(fiber);
         qc.end_label();
     }
 
     // Receive the qubit!
-    fiber.exchange(b);
+    qc.exchange(fiber, b);
 
     qc.label("apply had");
-    if recv_had.is_one() {
-        b.had();
+    if recv_had == 1 {
+        qc.had(b);
     }
     qc.end_label();
 
     qc.label("read value");
-    let recv_val = b.read();
+    let recv_val = qc.read(b);
     qc.end_label();
 
     // Now Alice emails Bob to tell
@@ -83,6 +84,16 @@ fn run_spy_hunter_protocol() -> bool {
     false
 }
 
-fn main() {}
-*/
-fn main() {}
+fn main() {
+    let mut caught = 0;
+    let mut total = 0;
+    while total < 1000 {
+        if run_spy_hunter_protocol() {
+            caught += 1;
+        }
+
+        total += 1;
+    }
+
+    println!("Caught {} spies in {} trials.", caught, total);
+}

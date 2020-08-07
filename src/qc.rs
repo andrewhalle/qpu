@@ -1,8 +1,9 @@
-use super::qubit::{Qubit, Binary};
+use super::qubit::{Binary, Qubit};
+use num::Complex;
 use rand::prelude::*;
+use std::convert::TryInto;
 use std::f64::consts::*;
 use std::mem::swap;
-use num::Complex;
 
 mod helpers {
     use super::*;
@@ -13,9 +14,19 @@ mod helpers {
         (half_angle.cos(), half_angle.sin())
     }
 
-    pub fn bitmask_for_each<F: FnMut(&mut Qubit, usize)>(mask: usize, iterator: IterMut<Qubit>, mut f: F) {
+    pub fn bitmask_for_each<T: Into<QubitTarget>, F: FnMut(&mut Qubit, usize)>(
+        target: T,
+        iterator: IterMut<Qubit>,
+        mut f: F,
+    ) {
+        let target = target.into();
+        let (skip, mask) = match target {
+            QubitTarget::Absolute(t) => (0, t),
+            QubitTarget::Register { skip, take } => (skip, (1_usize << take) - 1),
+        };
+
         let mut curr = 1_usize;
-        for q in iterator {
+        for q in iterator.skip(skip) {
             if mask & curr != 0 {
                 f(q, curr);
             }
@@ -25,16 +36,42 @@ mod helpers {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum QubitTarget {
+    Absolute(usize),
+    Register { skip: usize, take: usize },
+}
+
+impl From<usize> for QubitTarget {
+    fn from(u: usize) -> QubitTarget {
+        QubitTarget::Absolute(u)
+    }
+}
+
+impl QubitTarget {
+    fn count(&self) -> usize {
+        match self {
+            QubitTarget::Absolute(t) => t.count_ones().try_into().unwrap(),
+            QubitTarget::Register { take, .. } => *take,
+        }
+    }
+}
+
 /// An quantum computer prepared with a single qubit.
 pub struct QuantumComputer {
     qs: Vec<Qubit>,
+    allocated: usize,
 }
 
 impl QuantumComputer {
     /// Initialize the quantum computer with n qubits, all zero.
     pub fn reset(n: u8) -> Self {
         QuantumComputer {
-            qs: vec![Qubit::zero(); n.into()],
+            qs: vec![0; n.into()]
+                .into_iter()
+                .map(|_| Qubit::zero())
+                .collect(),
+            allocated: 0,
         }
     }
 
@@ -44,8 +81,16 @@ impl QuantumComputer {
     /// End a label block (for the circuit diagram).
     pub fn end_label(&mut self) {}
 
+    /// Create a register using the bottom `n` unallocated bits.
+    pub fn qint(&mut self, take: usize, _name: &str) -> QubitTarget {
+        let skip = self.allocated;
+        self.allocated += take;
+
+        QubitTarget::Register { skip, take }
+    }
+
     /// Quantum NOT operator. Applies to all qubits identified by the mask `target`.
-    pub fn not(&mut self, target: usize) {
+    pub fn not<T: Into<QubitTarget>>(&mut self, target: T) {
         helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
             swap(&mut q.0, &mut q.1);
         });
@@ -53,7 +98,7 @@ impl QuantumComputer {
 
     /// Quantum HAD operator (Hadamard gate). Applies to all qubits identified by the mask
     /// `target`.
-    pub fn had(&mut self, target: usize) {
+    pub fn had<T: Into<QubitTarget>>(&mut self, target: T) {
         helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
             let tmp = q.0;
             q.0 = FRAC_1_SQRT_2 * (q.0 + q.1);
@@ -63,7 +108,7 @@ impl QuantumComputer {
 
     /// Quantum READ operator. Returns a random result with probability based on the
     /// magnitudes. Applies to all qubits identified by the mask `target`.
-    pub fn read(&mut self, target: usize) -> usize {
+    pub fn read<T: Into<QubitTarget>>(&mut self, target: T) -> usize {
         let mut rng = thread_rng();
         let mut res = 0;
 
@@ -79,7 +124,7 @@ impl QuantumComputer {
 
     /// Quantum WRITE operator. Deterministically sets the values of a qubit based on `value`.
     /// Applies to the qubits specified by `target`.
-    pub fn write(&mut self, value: usize, target: usize) {
+    pub fn write<T: Into<QubitTarget>>(&mut self, value: usize, target: T) {
         helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, curr| {
             let mut new = if value & curr != 0 {
                 Qubit::one()
@@ -93,7 +138,7 @@ impl QuantumComputer {
 
     /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>. Applies to the qubits specified by
     /// `target`.
-    pub fn phase(&mut self, angle: f64, target: usize) {
+    pub fn phase<T: Into<QubitTarget>>(&mut self, angle: f64, target: T) {
         helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
             q.1 = (Complex::i() * angle).exp() * q.1;
         });
@@ -101,7 +146,7 @@ impl QuantumComputer {
 
     /// Quantum ROTX operator. Rotates in the X plane of the Bloch sphere. Applies to the qubits
     /// specified by `target`.
-    pub fn rotx(&mut self, angle: f64, target: usize) {
+    pub fn rotx<T: Into<QubitTarget>>(&mut self, angle: f64, target: T) {
         let (f1, f2) = helpers::half_angle_factors(angle);
 
         helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
@@ -116,7 +161,7 @@ impl QuantumComputer {
 
     /// Quantum ROTY operator. Rotates in the Y plane of the Bloch sphere. Applies to the qubits
     /// specified by `target`.
-    pub fn roty(&mut self, angle: f64, target: usize) {
+    pub fn roty<T: Into<QubitTarget>>(&mut self, angle: f64, target: T) {
         let (f1, f2) = helpers::half_angle_factors(angle);
 
         helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
@@ -131,16 +176,49 @@ impl QuantumComputer {
 
     /// Quantum ROOT-of-NOT operator. Two applications should equal a NOT. Applies to all qubits
     /// specified by `target`.
-    pub fn root_of_not(&mut self, target: usize) {
+    pub fn root_of_not<T: Into<QubitTarget>>(&mut self, target: T) {
+        let target = target.into();
         self.had(target);
         self.phase(-FRAC_PI_2, target);
         self.had(target);
+    }
+
+    /// Exchange 2 targets. The targets must specify the same number of qubits.
+    pub fn exchange<T: Into<QubitTarget>>(&mut self, src: T, dest: T) {
+        let src = src.into();
+        let dest = dest.into();
+
+        assert_eq!(src.count(), dest.count());
+
+        let mut qubits = Vec::new();
+        helpers::bitmask_for_each(src, self.qs.iter_mut(), |q, _| {
+            qubits.push(Qubit::zero());
+            swap(qubits.last_mut().unwrap(), q);
+        });
+        qubits.reverse();
+
+        helpers::bitmask_for_each(dest, self.qs.iter_mut(), |q, _| {
+            swap(qubits.last_mut().unwrap(), q);
+        });
+        qubits.reverse();
+
+        helpers::bitmask_for_each(src, self.qs.iter_mut(), |q, _| {
+            swap(qubits.last_mut().unwrap(), q);
+            qubits.pop();
+        });
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn qint() {
+        let mut qc = QuantumComputer::reset(5);
+        assert_eq!(qc.qint(3, ""), QubitTarget::Register { skip: 0, take: 3 });
+        assert_eq!(qc.qint(2, ""), QubitTarget::Register { skip: 3, take: 2 });
+    }
 
     #[test]
     fn not() {
@@ -178,6 +256,10 @@ mod tests {
         let mut qc = QuantumComputer::reset(4);
         qc.not(0b1010);
         assert_eq!(qc.read(0b1111), 10);
+
+        let mut qc = QuantumComputer::reset(4);
+        qc.not(0b1010);
+        assert_eq!(qc.read(QubitTarget::Register { skip: 2, take: 2 }), 2);
     }
 
     #[test]
@@ -196,6 +278,10 @@ mod tests {
 
         let mut qc = QuantumComputer::reset(4);
         qc.write(0b1010, 0b1100);
+        assert_eq!(qc.read(0b1111), 8);
+
+        let mut qc = QuantumComputer::reset(4);
+        qc.write(0b10, QubitTarget::Register { skip: 2, take: 2 });
         assert_eq!(qc.read(0b1111), 8);
     }
 
@@ -235,7 +321,10 @@ mod tests {
     fn roty() {
         let mut qc = QuantumComputer::reset(1);
         qc.roty(PI, 0b1);
-        assert_eq!(qc.qs[0], Qubit(Complex::new(0.0, 0.0), Complex::new(0.0, 1.0)));
+        assert_eq!(
+            qc.qs[0],
+            Qubit(Complex::new(0.0, 0.0), Complex::new(0.0, 1.0))
+        );
     }
 
     #[test]
@@ -244,5 +333,15 @@ mod tests {
         qc.root_of_not(0b1);
         qc.root_of_not(0b1);
         assert_eq!(qc.qs[0], Qubit::one());
+    }
+
+    #[test]
+    fn exchange() {
+        let mut qc = QuantumComputer::reset(4);
+        let a = qc.qint(2, "");
+        let b = qc.qint(2, "");
+        qc.write(0b1001, 0b1111);
+        qc.exchange(a, b);
+        assert_eq!(qc.read(0b1111), 6);
     }
 }

@@ -1,7 +1,7 @@
 use approx::abs_diff_eq;
 use num::complex::Complex64;
 use num::Complex;
-use std::fmt::{Formatter, Display};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq)]
 pub enum Binary {
@@ -19,22 +19,16 @@ impl Display for Binary {
 }
 
 /// Representation of a qubit.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Qubit(pub Complex64, pub Complex64);
 
 impl Qubit {
     pub fn zero() -> Self {
-        Qubit(
-            Complex::new(1.0, 0.0),
-            Complex::new(0.0, 0.0),
-        )
+        Qubit(Complex::new(1.0, 0.0), Complex::new(0.0, 0.0))
     }
 
     pub fn one() -> Self {
-        Qubit(
-            Complex::new(0.0, 0.0),
-            Complex::new(1.0, 0.0),
-        )
+        Qubit(Complex::new(0.0, 0.0), Complex::new(1.0, 0.0))
     }
 
     pub fn read(&mut self, measurement: f64) -> Binary {
@@ -49,7 +43,6 @@ impl Qubit {
 
             Binary::One
         }
-
     }
 }
 
