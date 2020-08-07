@@ -195,16 +195,17 @@ impl QuantumComputer {
             qubits.push(Qubit::zero());
             swap(qubits.last_mut().unwrap(), q);
         });
-        qubits.reverse();
 
+        let mut curr = 0;
         helpers::bitmask_for_each(dest, self.qs.iter_mut(), |q, _| {
-            swap(qubits.last_mut().unwrap(), q);
+            swap(&mut qubits[curr], q);
+            curr += 1;
         });
-        qubits.reverse();
 
+        let mut curr = 0;
         helpers::bitmask_for_each(src, self.qs.iter_mut(), |q, _| {
-            swap(qubits.last_mut().unwrap(), q);
-            qubits.pop();
+            swap(&mut qubits[curr], q);
+            curr += 1;
         });
     }
 }
@@ -343,5 +344,12 @@ mod tests {
         qc.write(0b1001, 0b1111);
         qc.exchange(a, b);
         assert_eq!(qc.read(0b1111), 6);
+
+        let mut qc = QuantumComputer::reset(6);
+        let a = qc.qint(3, "");
+        let b = qc.qint(3, "");
+        qc.write(0b101000, 0b111111);
+        qc.exchange(a, b);
+        assert_eq!(qc.read(0b111111), 5);
     }
 }
