@@ -134,24 +134,23 @@ impl QuantumComputer {
     }
     */
 
-    /// Quantum NOT operator. Applies to all qubits identified by the mask `target`.
+    /// Quantum NOT operator. Applies to the single qubit specified by `target`.
     pub fn not<T: Into<QubitAddress>>(&mut self, target: T) {
         helpers::for_each_operator_pair(&mut self.amplitudes, target, |a1, a2| {
             swap(a1, a2);
         });
     }
 
-    /*
-    /// Quantum HAD operator (Hadamard gate). Applies to all qubits identified by the mask
-    /// `target`.
-    pub fn had<T: Into<QubitTarget>>(&mut self, target: T) {
-        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
-            let tmp = q.0;
-            q.0 = FRAC_1_SQRT_2 * (q.0 + q.1);
-            q.1 = FRAC_1_SQRT_2 * (tmp - q.1);
+    /// Quantum HAD operator (Hadamard gate). Applies to the single qubit specified by `target`.
+    pub fn had<T: Into<QubitAddress>>(&mut self, target: T) {
+        helpers::for_each_operator_pair(&mut self.amplitudes, target, |a1, a2| {
+            let tmp = *a1;
+            *a1 = FRAC_1_SQRT_2 * (*a1 + *a2);
+            *a2 = FRAC_1_SQRT_2 * (tmp - *a2);
         });
     }
 
+    /*
     /// Quantum READ operator. Returns a random result with probability based on the
     /// magnitudes. Applies to all qubits identified by the mask `target`.
     pub fn read<T: Into<QubitTarget>>(&mut self, target: T) -> usize {
@@ -320,31 +319,31 @@ mod tests {
         );
     }
 
-    /*
     #[test]
     fn had() {
         let mut qc = QuantumComputer::reset(1);
         qc.had(0b1);
         assert_eq!(
-            qc.qs[0],
-            Qubit(
-                Complex::new(FRAC_1_SQRT_2, 0.0),
-                Complex::new(FRAC_1_SQRT_2, 0.0),
-            )
+            qc.amplitudes,
+            vec![
+                Complex64::new(FRAC_1_SQRT_2, 0.0),
+                Complex64::new(FRAC_1_SQRT_2, 0.0),
+            ]
         );
 
         qc = QuantumComputer::reset(1);
         qc.not(0b1);
         qc.had(0b1);
         assert_eq!(
-            qc.qs[0],
-            Qubit(
-                Complex::new(FRAC_1_SQRT_2, 0.0),
-                Complex::new(-FRAC_1_SQRT_2, 0.0),
-            )
+            qc.amplitudes,
+            vec![
+                Complex64::new(FRAC_1_SQRT_2, 0.0),
+                Complex64::new(-FRAC_1_SQRT_2, 0.0),
+            ]
         );
     }
 
+    /*
     #[test]
     fn read() {
         let mut qc = QuantumComputer::reset(4);
