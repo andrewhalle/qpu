@@ -1,3 +1,4 @@
+/*
 // Ex 2-4: Quantum Spy Hunter
 use qpu::QuantumComputer;
 use rand::prelude::*;
@@ -119,3 +120,5 @@ fn main() {
         println!("{} usable bits extracted out of {}", usable, total);
     }
 }
+*/
+fn main() {}

@@ -1,40 +1,68 @@
-use super::qubit::{Binary, Qubit};
-use num::Complex;
+use num::complex::Complex64;
 use rand::prelude::*;
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::f64::consts::*;
 use std::mem::swap;
 
 mod helpers {
     use super::*;
-    use std::slice::IterMut;
+    /*
+        use std::slice::IterMut;
+    */
 
     pub fn half_angle_factors(angle: f64) -> (f64, f64) {
         let half_angle = angle / 2.0;
         (half_angle.cos(), half_angle.sin())
     }
 
-    pub fn bitmask_for_each<T: Into<QubitTarget>, F: FnMut(&mut Qubit, usize)>(
+    pub fn for_each_operator_pair<
+        T: Into<QubitAddress>,
+        F: FnMut(&mut Complex64, &mut Complex64),
+    >(
+        amplitudes: &mut Vec<Complex64>,
         target: T,
-        iterator: IterMut<Qubit>,
         mut f: F,
     ) {
-        let target = target.into();
-        let (skip, mask) = match target {
-            QubitTarget::Absolute(t) => (0, t),
-            QubitTarget::Register { skip, take } => (skip, (1_usize << take) - 1),
-        };
+        let mut processed = HashSet::new();
+        let target = target.into().0;
 
-        let mut curr = 1_usize;
-        for q in iterator.skip(skip) {
-            if mask & curr != 0 {
-                f(q, curr);
+        for i in 0..amplitudes.len() {
+            if !processed.contains(&i) {
+                let pair = i + target;
+
+                let (first, last) = amplitudes.split_at_mut(pair);
+                f(&mut first[i], &mut last[0]);
+                processed.insert(i);
+                processed.insert(pair);
             }
-
-            curr <<= 1;
         }
     }
+
+    /*
+        pub fn bitmask_for_each<T: Into<QubitTarget>, F: FnMut(&mut Qubit, usize)>(
+            target: T,
+            iterator: IterMut<Qubit>,
+            mut f: F,
+        ) {
+            let target = target.into();
+            let (skip, mask) = match target {
+                QubitTarget::Absolute(t) => (0, t),
+                QubitTarget::Register { skip, take } => (skip, (1_usize << take) - 1),
+            };
+
+            let mut curr = 1_usize;
+            for q in iterator.skip(skip) {
+                if mask & curr != 0 {
+                    f(q, curr);
+                }
+
+                curr <<= 1;
+            }
+        }
+    */
 }
+/*
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum QubitTarget {
@@ -56,21 +84,36 @@ impl QubitTarget {
         }
     }
 }
+*/
+pub struct QubitAddress(usize);
 
-/// An quantum computer prepared with a single qubit.
+impl From<usize> for QubitAddress {
+    fn from(u: usize) -> Self {
+        if !u.is_power_of_two() {
+            panic!("QubitAddress specifies a single qubit.");
+        }
+
+        QubitAddress(u)
+    }
+}
+
+/// A quantum computer prepared with a number of qubits. The quantum computer does not store qubits
+/// individually, but rather stores the complex amplitudes associated to each basis state (for the
+/// number of qubits the QC is initialized with). There will be 2^n such amplitudes.
 pub struct QuantumComputer {
-    qs: Vec<Qubit>,
+    amplitudes: Vec<Complex64>,
     allocated: usize,
 }
 
 impl QuantumComputer {
-    /// Initialize the quantum computer with n qubits, all zero.
+    /// Initialize the quantum computer with n qubits, in state |00..0>
     pub fn reset(n: u8) -> Self {
+        let mut amplitudes = vec![Complex64::new(0.0, 0.0); 2_usize.pow(n.into())];
+
+        amplitudes[0] = Complex64::new(1.0, 0.0);
+
         QuantumComputer {
-            qs: vec![0; n.into()]
-                .into_iter()
-                .map(|_| Qubit::zero())
-                .collect(),
+            amplitudes,
             allocated: 0,
         }
     }
@@ -81,6 +124,7 @@ impl QuantumComputer {
     /// End a label block (for the circuit diagram).
     pub fn end_label(&mut self) {}
 
+    /*
     /// Create a register using the bottom `n` unallocated bits.
     pub fn qint(&mut self, take: usize, _name: &str) -> QubitTarget {
         let skip = self.allocated;
@@ -88,14 +132,16 @@ impl QuantumComputer {
 
         QubitTarget::Register { skip, take }
     }
+    */
 
     /// Quantum NOT operator. Applies to all qubits identified by the mask `target`.
-    pub fn not<T: Into<QubitTarget>>(&mut self, target: T) {
-        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
-            swap(&mut q.0, &mut q.1);
+    pub fn not<T: Into<QubitAddress>>(&mut self, target: T) {
+        helpers::for_each_operator_pair(&mut self.amplitudes, target, |a1, a2| {
+            swap(a1, a2);
         });
     }
 
+    /*
     /// Quantum HAD operator (Hadamard gate). Applies to all qubits identified by the mask
     /// `target`.
     pub fn had<T: Into<QubitTarget>>(&mut self, target: T) {
@@ -208,26 +254,73 @@ impl QuantumComputer {
             curr += 1;
         });
     }
+    */
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /*
     #[test]
     fn qint() {
         let mut qc = QuantumComputer::reset(5);
         assert_eq!(qc.qint(3, ""), QubitTarget::Register { skip: 0, take: 3 });
         assert_eq!(qc.qint(2, ""), QubitTarget::Register { skip: 3, take: 2 });
     }
+    */
 
     #[test]
     fn not() {
         let mut qc = QuantumComputer::reset(1);
         qc.not(0b1);
-        assert_eq!(qc.qs[0], Qubit::one());
+        assert_eq!(
+            qc.amplitudes,
+            vec![Complex64::new(0.0, 0.0), Complex64::new(1.0, 0.0)]
+        );
+
+        // the amplitudes I'm using here aren't realizable, but they do demonstrate the appropriate
+        // swapping of states
+        let mut qc = QuantumComputer::reset(2);
+        qc.amplitudes = vec![
+            Complex64::new(1.0, 0.0),
+            Complex64::new(1.0, 0.0),
+            Complex64::new(0.0, 0.0),
+            Complex64::new(1.0, 0.0),
+        ];
+        qc.not(0b1);
+        assert_eq!(
+            qc.amplitudes,
+            vec![
+                Complex64::new(1.0, 0.0),
+                Complex64::new(1.0, 0.0),
+                Complex64::new(1.0, 0.0),
+                Complex64::new(0.0, 0.0),
+            ],
+        );
+
+        // the amplitudes I'm using here aren't realizable, but they do demonstrate the appropriate
+        // swapping of states
+        let mut qc = QuantumComputer::reset(2);
+        qc.amplitudes = vec![
+            Complex64::new(1.0, 0.0),
+            Complex64::new(1.0, 0.0),
+            Complex64::new(0.0, 0.0),
+            Complex64::new(1.0, 0.0),
+        ];
+        qc.not(0b10);
+        assert_eq!(
+            qc.amplitudes,
+            vec![
+                Complex64::new(0.0, 0.0),
+                Complex64::new(1.0, 0.0),
+                Complex64::new(1.0, 0.0),
+                Complex64::new(1.0, 0.0),
+            ],
+        );
     }
 
+    /*
     #[test]
     fn had() {
         let mut qc = QuantumComputer::reset(1);
@@ -352,4 +445,5 @@ mod tests {
         qc.exchange(a, b);
         assert_eq!(qc.read(0b111111), 5);
     }
+    */
 }

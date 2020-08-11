@@ -1,3 +1,4 @@
+/*
 // Ex 2-2: Random Byte
 use qpu::QuantumComputer;
 
@@ -6,3 +7,5 @@ fn main() {
     qc.had(0xff);
     println!("{:#010b}", qc.read(0xff));
 }
+*/
+fn main() {}

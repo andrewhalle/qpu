@@ -1,4 +1,3 @@
 mod qc;
-mod qubit;
 
-pub use qc::{QuantumComputer, QubitTarget};
+pub use qc::QuantumComputer;
