@@ -152,7 +152,7 @@ impl QuantumComputer {
 
     /// Quantum READ operator. Collapses the state of the qubit specified by `target` and returns
     /// the result. Will cause re-normalization.
-    pub fn read<T: Into<QubitAddress> + Copy>(&mut self, target: T) -> usize {
+    pub fn read<T: Into<QubitAddress> + Copy>(&mut self, target: T) -> u8 {
         let mut rng = thread_rng();
         let measurement = rng.gen();
 
@@ -163,7 +163,7 @@ impl QuantumComputer {
         &mut self,
         target: T,
         measurement: f64,
-    ) -> usize {
+    ) -> u8 {
         let mut zero_probability = 0.0;
 
         // the sum of norm squares of the left-hand side of operator pairs is equal to the
@@ -202,21 +202,29 @@ impl QuantumComputer {
         }
     }
 
-    /*
-    /// Quantum WRITE operator. Deterministically sets the values of a qubit based on `value`.
-    /// Applies to the qubits specified by `target`.
-    pub fn write<T: Into<QubitTarget>>(&mut self, value: usize, target: T) {
-        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, curr| {
-            let mut new = if value & curr != 0 {
-                Qubit::one()
-            } else {
-                Qubit::zero()
-            };
+    /// Quantum WRITE operator. Sets the value of the qubit specified by
+    /// `target`. Equivlent to a read + a conditional NOT. Value must be 0 or 1.
+    pub fn write<T: Into<QubitAddress> + Copy>(&mut self, target: T, value: u8) {
+        let mut rng = thread_rng();
+        let measurement = rng.gen();
 
-            swap(q, &mut new);
-        });
+        self.write_deterministic(target, value, measurement);
     }
 
+    fn write_deterministic<T: Into<QubitAddress> + Copy>(
+        &mut self,
+        target: T,
+        value: u8,
+        measurement: f64,
+    ) {
+        assert!(value == 0 || value == 1);
+
+        if self.read_deterministic(target, measurement) != value {
+            self.not(target);
+        }
+    }
+
+    /*
     /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>. Applies to the qubits specified by
     /// `target`.
     pub fn phase<T: Into<QubitTarget>>(&mut self, angle: f64, target: T) {
@@ -296,6 +304,10 @@ impl QuantumComputer {
 mod tests {
     use super::*;
 
+    const one: Complex64 = Complex64::new(1.0, 0.0);
+    const zero: Complex64 = Complex64::new(0.0, 0.0);
+    const frac2: Complex64 = Complex64::new(FRAC_1_SQRT_2, 0.0);
+
     /*
     #[test]
     fn qint() {
@@ -309,74 +321,33 @@ mod tests {
     fn not() {
         let mut qc = QuantumComputer::reset(1);
         qc.not(0b1);
-        assert_eq!(
-            qc.amplitudes,
-            vec![Complex64::new(0.0, 0.0), Complex64::new(1.0, 0.0)]
-        );
+        assert_eq!(qc.amplitudes, vec![zero, one]);
 
         // the amplitudes I'm using here aren't realizable, but they do demonstrate the appropriate
         // swapping of states
         let mut qc = QuantumComputer::reset(2);
-        qc.amplitudes = vec![
-            Complex64::new(1.0, 0.0),
-            Complex64::new(1.0, 0.0),
-            Complex64::new(0.0, 0.0),
-            Complex64::new(1.0, 0.0),
-        ];
+        qc.amplitudes = vec![one, one, zero, one];
         qc.not(0b1);
-        assert_eq!(
-            qc.amplitudes,
-            vec![
-                Complex64::new(1.0, 0.0),
-                Complex64::new(1.0, 0.0),
-                Complex64::new(1.0, 0.0),
-                Complex64::new(0.0, 0.0),
-            ],
-        );
+        assert_eq!(qc.amplitudes, vec![one, one, one, zero],);
 
         // the amplitudes I'm using here aren't realizable, but they do demonstrate the appropriate
         // swapping of states
         let mut qc = QuantumComputer::reset(2);
-        qc.amplitudes = vec![
-            Complex64::new(1.0, 0.0),
-            Complex64::new(1.0, 0.0),
-            Complex64::new(0.0, 0.0),
-            Complex64::new(1.0, 0.0),
-        ];
+        qc.amplitudes = vec![one, one, zero, one];
         qc.not(0b10);
-        assert_eq!(
-            qc.amplitudes,
-            vec![
-                Complex64::new(0.0, 0.0),
-                Complex64::new(1.0, 0.0),
-                Complex64::new(1.0, 0.0),
-                Complex64::new(1.0, 0.0),
-            ],
-        );
+        assert_eq!(qc.amplitudes, vec![zero, one, one, one],);
     }
 
     #[test]
     fn had() {
         let mut qc = QuantumComputer::reset(1);
         qc.had(0b1);
-        assert_eq!(
-            qc.amplitudes,
-            vec![
-                Complex64::new(FRAC_1_SQRT_2, 0.0),
-                Complex64::new(FRAC_1_SQRT_2, 0.0),
-            ]
-        );
+        assert_eq!(qc.amplitudes, vec![frac2, frac2]);
 
         qc = QuantumComputer::reset(1);
         qc.not(0b1);
         qc.had(0b1);
-        assert_eq!(
-            qc.amplitudes,
-            vec![
-                Complex64::new(FRAC_1_SQRT_2, 0.0),
-                Complex64::new(-FRAC_1_SQRT_2, 0.0),
-            ]
-        );
+        assert_eq!(qc.amplitudes, vec![frac2, -frac2]);
     }
 
     #[test]
@@ -390,86 +361,36 @@ mod tests {
         assert_eq!(qc.read_deterministic(0b1, 0.51), 1);
 
         let mut qc = QuantumComputer::reset(2);
-        qc.amplitudes = vec![
-            Complex64::new(FRAC_1_SQRT_2, 0.0),
-            Complex64::new(0.0, 0.0),
-            Complex64::new(0.0, 0.0),
-            Complex64::new(FRAC_1_SQRT_2, 0.0),
-        ];
+        qc.amplitudes = vec![frac2, zero, zero, frac2];
         assert_eq!(qc.read_deterministic(0b1, 0.49), 0);
-        assert_eq!(
-            qc.amplitudes,
-            vec![
-                Complex64::new(1.0, 0.0),
-                Complex64::new(0.0, 0.0),
-                Complex64::new(0.0, 0.0),
-                Complex64::new(0.0, 0.0),
-            ]
-        );
+        assert_eq!(qc.amplitudes, vec![one, zero, zero, zero]);
 
         let mut qc = QuantumComputer::reset(2);
-        qc.amplitudes = vec![
-            Complex64::new(1.0, 0.0),
-            Complex64::new(1.0, 0.0),
-            Complex64::new(0.0, 0.0),
-            Complex64::new(1.0, 0.0),
-        ];
+        qc.amplitudes = vec![one, one, zero, one];
         qc.renormalize();
         qc.read_deterministic(0b1, 0.1);
-        assert_eq!(
-            qc.amplitudes,
-            vec![
-                Complex64::new(1.0, 0.0),
-                Complex64::new(0.0, 0.0),
-                Complex64::new(0.0, 0.0),
-                Complex64::new(0.0, 0.0),
-            ]
-        );
+        assert_eq!(qc.amplitudes, vec![one, zero, zero, zero]);
 
         let mut qc = QuantumComputer::reset(2);
-        qc.amplitudes = vec![
-            Complex64::new(1.0, 0.0),
-            Complex64::new(1.0, 0.0),
-            Complex64::new(0.0, 0.0),
-            Complex64::new(1.0, 0.0),
-        ];
+        qc.amplitudes = vec![one, one, zero, one];
         qc.renormalize();
         qc.read_deterministic(0b1, 0.9);
-        assert_eq!(
-            qc.amplitudes,
-            vec![
-                Complex64::new(0.0, 0.0),
-                Complex64::new(FRAC_1_SQRT_2, 0.0),
-                Complex64::new(0.0, 0.0),
-                Complex64::new(FRAC_1_SQRT_2, 0.0),
-            ]
-        );
+        assert_eq!(qc.amplitudes, vec![zero, frac2, zero, frac2]);
     }
 
-    /*
     #[test]
     fn write() {
         let mut qc = QuantumComputer::reset(1);
-        qc.write(0x1, 0x1);
-        assert_eq!(qc.qs[0], Qubit::one());
+        qc.write(0b1, 1);
+        assert_eq!(qc.amplitudes, vec![zero, one]);
 
-        let mut qc = QuantumComputer::reset(4);
-        qc.write(0b1010, 0b1111);
-        assert_eq!(qc.read(0b1111), 10);
-
-        let mut qc = QuantumComputer::reset(4);
-        qc.write(0b1010, 0b11);
-        assert_eq!(qc.read(0b1111), 2);
-
-        let mut qc = QuantumComputer::reset(4);
-        qc.write(0b1010, 0b1100);
-        assert_eq!(qc.read(0b1111), 8);
-
-        let mut qc = QuantumComputer::reset(4);
-        qc.write(0b10, QubitTarget::Register { skip: 2, take: 2 });
-        assert_eq!(qc.read(0b1111), 8);
+        let mut qc = QuantumComputer::reset(2);
+        qc.amplitudes = vec![frac2, zero, zero, frac2];
+        qc.write_deterministic(0b1, 1, 0.49);
+        assert_eq!(qc.amplitudes, vec![zero, one, zero, zero]);
     }
 
+    /*
     #[test]
     fn phase() {
         let mut qc = QuantumComputer::reset(1);
