@@ -16,14 +16,11 @@ mod helpers {
         (half_angle.cos(), half_angle.sin())
     }
 
-    pub fn for_each_operator_pair<
+    pub fn for_each_operator_pair<T, F>(amplitudes: &mut Vec<Complex64>, target: T, mut f: F)
+    where
         T: Into<QubitAddress>,
         F: FnMut(&mut Complex64, &mut Complex64),
-    >(
-        amplitudes: &mut Vec<Complex64>,
-        target: T,
-        mut f: F,
-    ) {
+    {
         let mut processed = HashSet::new();
         let target = target.into().0;
 
@@ -159,11 +156,10 @@ impl QuantumComputer {
         self.read_deterministic(target, measurement)
     }
 
-    fn read_deterministic<T: Into<QubitAddress> + Copy>(
-        &mut self,
-        target: T,
-        measurement: f64,
-    ) -> u8 {
+    fn read_deterministic<T>(&mut self, target: T, measurement: f64) -> u8
+    where
+        T: Into<QubitAddress> + Copy,
+    {
         let mut zero_probability = 0.0;
 
         // the sum of norm squares of the left-hand side of operator pairs is equal to the
@@ -211,12 +207,10 @@ impl QuantumComputer {
         self.write_deterministic(target, value, measurement);
     }
 
-    fn write_deterministic<T: Into<QubitAddress> + Copy>(
-        &mut self,
-        target: T,
-        value: u8,
-        measurement: f64,
-    ) {
+    fn write_deterministic<T>(&mut self, target: T, value: u8, measurement: f64)
+    where
+        T: Into<QubitAddress> + Copy,
+    {
         assert!(value == 0 || value == 1);
 
         if self.read_deterministic(target, measurement) != value {
