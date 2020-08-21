@@ -37,6 +37,7 @@ type C64Matrix = DMatrix<C64>;
 
 const ZERO: C64 = C64::new(0.0, 0.0);
 const ONE: C64 = C64::new(1.0, 0.0);
+const FRAC2: C64 = C64::new(FRAC_1_SQRT_2, 0.0);
 
 pub struct PowerOfTwo(usize);
 impl From<usize> for PowerOfTwo {
@@ -73,29 +74,31 @@ impl QuantumComputer {
         QuantumComputer { amplitudes, n }
     }
 
-    /// Quantum NOT operator. Applies to the single qubit specified by `target`.
-    pub fn not<T: Into<PowerOfTwo>>(&mut self, target: T) {
-        let op = helpers::build_single_qubit_operator_matrix(
-            C64Matrix::from_row_slice(2, 2, &[ZERO, ONE, ONE, ZERO]),
-            self.n,
-            target.into(),
-        );
+    fn apply_single_qubit_operator(&mut self, target: PowerOfTwo, op: C64Matrix) {
+        let op = helpers::build_single_qubit_operator_matrix(op, self.n, target);
 
-        let mut amps = C64Vector::from_element(1, ZERO);
+        let mut amps = C64Vector::zeros(0);
         swap(&mut amps, &mut self.amplitudes);
         self.amplitudes = op * amps;
     }
 
-    /*
-    /// Quantum HAD operator (Hadamard gate). Applies to the single qubit specified by `target`.
-    pub fn had<T: Into<QubitAddress>>(&mut self, target: T) {
-        helpers::for_each_operator_pair(&mut self.amplitudes, target, |a1, a2| {
-            let tmp = *a1;
-            *a1 = FRAC_1_SQRT_2 * (*a1 + *a2);
-            *a2 = FRAC_1_SQRT_2 * (tmp - *a2);
-        });
+    /// Quantum NOT operator. Applies to the single qubit specified by `target`.
+    pub fn not<T: Into<PowerOfTwo>>(&mut self, target: T) {
+        self.apply_single_qubit_operator(
+            target.into(),
+            C64Matrix::from_row_slice(2, 2, &[ZERO, ONE, ONE, ZERO]),
+        );
     }
 
+    /// Quantum HAD operator (Hadamard gate). Applies to the single qubit specified by `target`.
+    pub fn had<T: Into<PowerOfTwo>>(&mut self, target: T) {
+        self.apply_single_qubit_operator(
+            target.into(),
+            C64Matrix::from_row_slice(2, 2, &[FRAC2, FRAC2, FRAC2, -FRAC2]),
+        );
+    }
+
+    /*
     /// Quantum READ operator. Collapses the state of the qubit specified by `target` and returns
     /// the result. Will cause re-normalization.
     pub fn read<T: Into<QubitAddress> + Copy>(&mut self, target: T) -> u8 {
@@ -289,19 +292,22 @@ mod tests {
         );
     }
 
-    /*
     #[test]
     fn had() {
         let mut qc = QuantumComputer::reset(1);
         qc.had(0b1);
-        assert_eq!(qc.amplitudes, vec![frac2, frac2]);
+        assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[FRAC2, FRAC2]));
 
         qc = QuantumComputer::reset(1);
         qc.not(0b1);
         qc.had(0b1);
-        assert_eq!(qc.amplitudes, vec![frac2, -frac2]);
+        assert_eq!(
+            qc.amplitudes,
+            C64Vector::from_column_slice(&[FRAC2, -FRAC2])
+        );
     }
 
+    /*
     #[test]
     fn read_deterministic() {
         let mut qc = QuantumComputer::reset(1);
