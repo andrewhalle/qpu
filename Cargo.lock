@@ -6,6 +6,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0e60b75072ecd4168020818c0107f2857bb6c4e64252d8d3983f6263b40a5c3"
 dependencies = [
+ "num-complex",
  "num-traits",
 ]
 
@@ -156,6 +157,7 @@ checksum = "99c605b9a0adc77b7211c6b1f722dcb613d68d66859a44f3d485a6da332b0598"
 name = "qpu"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "nalgebra",
  "num-complex",
  "rand",

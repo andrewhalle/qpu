@@ -10,3 +10,4 @@ edition = "2018"
 rand = "0.7.3"
 nalgebra = "0.21.1"
 num-complex = "0.2.4"
+approx = { version = "0.3.2", features = ["std", "num-complex"] }

@@ -1,3 +1,4 @@
+use approx::relative_eq;
 use nalgebra::{Complex, DMatrix, DVector};
 use rand::prelude::*;
 use std::convert::TryInto;
@@ -65,6 +66,27 @@ impl QuantumComputer {
         QuantumComputer { amplitudes, n }
     }
 
+    /// Overall phase doesn't matter for quantum computing, so after applying an operator
+    /// matrix, the amplitudes can be transformed into a standard form by multiplying by
+    /// any complex number of unit magnitude.
+    ///
+    /// Here we choose to make the first non-zero element of the amplitudes vector
+    /// real and positive.
+    fn remove_phase(&mut self) {
+        let first_nonzero_elem = self
+            .amplitudes
+            .iter()
+            .skip_while(|elem| relative_eq!(**elem, ZERO))
+            .next()
+            .unwrap();
+
+        let r = 1.0;
+        let theta = -first_nonzero_elem.arg();
+        let cancel_factor = C64::from_polar(&r, &theta);
+
+        self.amplitudes *= cancel_factor;
+    }
+
     fn apply_operator(&mut self, target: u8, op: C64Matrix) {
         assert!(target < self.n);
 
@@ -73,6 +95,8 @@ impl QuantumComputer {
         let mut amps = C64Vector::zeros(0);
         swap(&mut amps, &mut self.amplitudes);
         self.amplitudes = op * amps;
+
+        self.remove_phase();
     }
 
     /// Quantum NOT operator. Applies to the single qubit specified by `target`.
@@ -233,28 +257,32 @@ impl QuantumComputer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_relative_eq;
 
-    /*
     #[test]
-    fn qint() {
-        let mut qc = QuantumComputer::reset(5);
-        assert_eq!(qc.qint(3, ""), QubitTarget::Register { skip: 0, take: 3 });
-        assert_eq!(qc.qint(2, ""), QubitTarget::Register { skip: 3, take: 2 });
+    fn remove_phase() {
+        let mut qc = QuantumComputer::reset(2);
+        qc.amplitudes =
+            C64Vector::from_column_slice(&[ZERO, C64::i() / 2.0, -ONE / 2.0, -C64::i() / 2.0]);
+        qc.remove_phase();
+        assert_relative_eq!(
+            qc.amplitudes,
+            C64Vector::from_column_slice(&[ZERO, ONE / 2.0, C64::i() / 2.0, -ONE / 2.0])
+        );
     }
-    */
 
     #[test]
     fn not() {
         let mut qc = QuantumComputer::reset(1);
         qc.not(0);
-        assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]));
+        assert_relative_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]));
 
         // the amplitudes I'm using here aren't realizable, but they do demonstrate the appropriate
         // swapping of states
         let mut qc = QuantumComputer::reset(2);
         qc.amplitudes = C64Vector::from_column_slice(&[ONE, ONE, ZERO, ONE]);
         qc.not(0);
-        assert_eq!(
+        assert_relative_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[ONE, ONE, ONE, ZERO])
         );
@@ -264,14 +292,14 @@ mod tests {
         let mut qc = QuantumComputer::reset(2);
         qc.amplitudes = C64Vector::from_column_slice(&[ONE, ONE, ZERO, ONE]);
         qc.not(1);
-        assert_eq!(
+        assert_relative_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[ZERO, ONE, ONE, ONE])
         );
 
         let mut qc = QuantumComputer::reset(3);
         qc.not(2);
-        assert_eq!(
+        assert_relative_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[ZERO, ZERO, ZERO, ZERO, ONE, ZERO, ZERO, ZERO])
         );
@@ -281,12 +309,12 @@ mod tests {
     fn had() {
         let mut qc = QuantumComputer::reset(1);
         qc.had(0);
-        assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[FRAC2, FRAC2]));
+        assert_relative_eq!(qc.amplitudes, C64Vector::from_column_slice(&[FRAC2, FRAC2]));
 
         qc = QuantumComputer::reset(1);
         qc.not(0);
         qc.had(0);
-        assert_eq!(
+        assert_relative_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[FRAC2, -FRAC2])
         );
@@ -338,13 +366,13 @@ mod tests {
     fn phase() {
         let mut qc = QuantumComputer::reset(1);
         qc.phase(FRAC_PI_4, 0);
-        assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ONE, ZERO]));
+        assert_relative_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ONE, ZERO]));
 
         let EPI4: C64 = (C64::i() * FRAC_PI_4).exp();
         let mut qc = QuantumComputer::reset(1);
         qc.had(0);
         qc.phase(FRAC_PI_4, 0);
-        assert_eq!(
+        assert_relative_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[FRAC2, FRAC2 * EPI4])
         );
@@ -354,17 +382,14 @@ mod tests {
     fn rotx() {
         let mut qc = QuantumComputer::reset(1);
         qc.rotx(PI, 0);
-        assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]));
+        assert_relative_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]));
     }
 
     #[test]
     fn roty() {
         let mut qc = QuantumComputer::reset(1);
         qc.roty(PI, 0);
-        assert_eq!(
-            qc.amplitudes,
-            C64Vector::from_column_slice(&[ZERO, C64::i()]),
-        );
+        assert_relative_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]),);
     }
 
     /*
