@@ -216,42 +216,26 @@ impl QuantumComputer {
         );
     }
 
-    /*
     /// Quantum ROOT-of-NOT operator. Two applications should equal a NOT. Applies to all qubits
     /// specified by `target`.
-    pub fn root_of_not<T: Into<QubitTarget>>(&mut self, target: T) {
-        let target = target.into();
+    pub fn root_of_not(&mut self, target: u8) {
         self.had(target);
         self.phase(-FRAC_PI_2, target);
         self.had(target);
     }
 
-    /// Exchange 2 targets. The targets must specify the same number of qubits.
-    pub fn exchange<T: Into<QubitTarget>>(&mut self, src: T, dest: T) {
-        let src = src.into();
-        let dest = dest.into();
-
-        assert_eq!(src.count(), dest.count());
-
-        let mut qubits = Vec::new();
-        helpers::bitmask_for_each(src, self.qs.iter_mut(), |q, _| {
-            qubits.push(Qubit::zero());
-            swap(qubits.last_mut().unwrap(), q);
-        });
-
-        let mut curr = 0;
-        helpers::bitmask_for_each(dest, self.qs.iter_mut(), |q, _| {
-            swap(&mut qubits[curr], q);
-            curr += 1;
-        });
-
-        let mut curr = 0;
-        helpers::bitmask_for_each(src, self.qs.iter_mut(), |q, _| {
-            swap(&mut qubits[curr], q);
-            curr += 1;
-        });
+    /// Swap 2 qubits. Qubits must be neighbors (only local interactions allowed).
+    /// Applies to qubits `target` and `target + 1`.
+    pub fn swap(&mut self, target: u8) {
+        #[rustfmt::skip]
+        self.apply_operator(
+            target,
+            C64Matrix::from_row_slice(4, 4, &[ ONE,  ZERO, ZERO, ZERO,
+                                               ZERO, ZERO, ONE,  ZERO,
+                                               ZERO, ONE,  ZERO, ZERO,
+                                               ZERO, ZERO, ZERO, ONE  ]),
+        );
     }
-    */
 }
 
 #[cfg(test)]
@@ -392,30 +376,21 @@ mod tests {
         assert_relative_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]),);
     }
 
-    /*
     #[test]
     fn root_of_not() {
         let mut qc = QuantumComputer::reset(1);
-        qc.root_of_not(0b1);
-        qc.root_of_not(0b1);
-        assert_eq!(qc.qs[0], Qubit::one());
+        qc.root_of_not(0);
+        qc.root_of_not(0);
+        assert_relative_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]));
     }
 
     #[test]
-    fn exchange() {
+    fn swap() {
         let mut qc = QuantumComputer::reset(4);
-        let a = qc.qint(2, "");
-        let b = qc.qint(2, "");
-        qc.write(0b1001, 0b1111);
-        qc.exchange(a, b);
-        assert_eq!(qc.read(0b1111), 6);
-
-        let mut qc = QuantumComputer::reset(6);
-        let a = qc.qint(3, "");
-        let b = qc.qint(3, "");
-        qc.write(0b101000, 0b111111);
-        qc.exchange(a, b);
-        assert_eq!(qc.read(0b111111), 5);
+        qc.not(0);
+        qc.swap(0);
+        let mut expected = C64Vector::zeros(16);
+        expected[2] = ONE;
+        assert_relative_eq!(qc.amplitudes, expected);
     }
-    */
 }
