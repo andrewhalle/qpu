@@ -217,10 +217,21 @@ impl QuantumComputer {
         #[rustfmt::skip]
         self.apply_operator(
             target,
-            C64Matrix::from_row_slice(4, 4, &[ ONE,  ZERO, ZERO, ZERO,
-                                               ZERO, ZERO, ONE,  ZERO,
-                                               ZERO, ONE,  ZERO, ZERO,
-                                               ZERO, ZERO, ZERO, ONE  ]),
+            C64Matrix::from_row_slice(4, 4, &[ ONE , ZERO, ZERO, ZERO,
+                                               ZERO, ZERO, ONE , ZERO,
+                                               ZERO, ONE , ZERO, ZERO,
+                                               ZERO, ZERO, ZERO, ONE   ]),
+        );
+    }
+
+    pub fn cnot(&mut self, target: u8) {
+        #[rustfmt::skip]
+        self.apply_operator(
+            target,
+            C64Matrix::from_row_slice(4, 4, &[ ONE , ZERO, ZERO, ZERO,
+                                               ZERO, ONE , ZERO, ZERO,
+                                               ZERO, ZERO, ZERO, ONE ,
+                                               ZERO, ZERO, ONE , ZERO  ])
         );
     }
 }
@@ -389,5 +400,16 @@ mod tests {
         let mut expected = C64Vector::zeros(16);
         expected[2] = ONE;
         assert_relative_eq!(qc.amplitudes, expected);
+    }
+
+    #[test]
+    fn cnot() {
+        let mut qc = QuantumComputer::reset(2);
+        qc.had(1);
+        qc.cnot(0);
+        assert_relative_eq!(
+            qc.amplitudes,
+            C64Vector::from_column_slice(&[FRAC2, ZERO, ZERO, FRAC2])
+        );
     }
 }
