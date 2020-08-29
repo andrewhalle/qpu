@@ -224,6 +224,8 @@ impl QuantumComputer {
         );
     }
 
+    /// Quantum CNOT gate. Qubits must be neighbors (only local interactions allowed).
+    /// `target` is the acted on qubit, and `target + 1` is the control qubit.
     pub fn cnot(&mut self, target: u8) {
         #[rustfmt::skip]
         self.apply_operator(
@@ -233,6 +235,24 @@ impl QuantumComputer {
                                                ZERO, ZERO, ZERO, ONE ,
                                                ZERO, ZERO, ONE , ZERO  ])
         );
+    }
+
+    /// Quantum CPHASE gate. Qubits must be neighbors (only local interactions allowed).
+    /// `target` is the acted on qubit, and `target + 1` is the control qubit.
+    pub fn cphase(&mut self, angle: f64, target: u8) {
+        let phase = (C64::i() * angle).exp();
+
+        #[rustfmt::skip]
+        self.apply_operator(
+            target,
+            C64Matrix::from_row_slice(4, 4, &[ ONE , ZERO, ZERO, ZERO ,
+                                               ZERO, ONE , ZERO, ZERO ,
+                                               ZERO, ZERO, ONE , ZERO ,
+                                               ZERO, ZERO, ZERO, phase ]));
+    }
+
+    pub fn cz(&mut self, target: u8) {
+        self.cphase(PI, target);
     }
 }
 
@@ -411,5 +431,22 @@ mod tests {
             qc.amplitudes,
             C64Vector::from_column_slice(&[FRAC2, ZERO, ZERO, FRAC2])
         );
+    }
+
+    #[test]
+    fn cphase() {
+        // initial state
+        let start = C64Vector::from_element(8, C64::new((8.0_f64).sqrt().recip(), 0.0));
+
+        // expect |3> and |7> to shift phase
+        let phase = (C64::i() * FRAC_PI_2).exp();
+        let mut expected = start.clone();
+        expected[3] *= phase;
+        expected[7] *= phase;
+
+        let mut qc = QuantumComputer::reset(3);
+        qc.amplitudes = start;
+        qc.cphase(FRAC_PI_2, 0);
+        assert_relative_eq!(qc.amplitudes, expected);
     }
 }
