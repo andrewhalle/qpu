@@ -7,20 +7,26 @@ use std::mem::swap;
 mod helpers {
     use super::*;
 
-    /*
-    pub fn half_angle_factors(angle: f64) -> (f64, f64) {
+    pub fn half_angle_factors(angle: f64) -> (C64, C64) {
         let half_angle = angle / 2.0;
-        (half_angle.cos(), half_angle.sin())
+        (
+            C64::new(half_angle.cos(), 0.0),
+            C64::new(half_angle.sin(), 0.0),
+        )
     }
-    */
 
-    pub fn build_single_qubit_operator_matrix(
-        base: C64Matrix,
-        n: u8,
-        target: PowerOfTwo,
-    ) -> C64Matrix {
-        let mut matrices = vec![C64Matrix::identity(2, 2); n.into()];
-        matrices[target.index()] = base;
+    pub fn build_operator_matrix(base: C64Matrix, n: u8, target: u8) -> C64Matrix {
+        assert!(base.is_square());
+        let n = Into::<usize>::into(n);
+        let target = Into::<usize>::into(target);
+
+        // the size of base determines the number of qubits being acted on
+        let num_qubits: usize = base.nrows().trailing_zeros().try_into().unwrap();
+
+        // set up list of matrices [I, I, .., I] we need n - num_qubits + 1
+        // because our final matrix needs to be of size (2^n, 2^n)
+        let mut matrices = vec![C64Matrix::identity(2, 2); n - num_qubits + 1];
+        matrices[target] = base;
 
         let mut retval = matrices.pop().unwrap();
         while let Some(m) = matrices.pop() {
@@ -38,21 +44,6 @@ type C64Matrix = DMatrix<C64>;
 const ZERO: C64 = C64::new(0.0, 0.0);
 const ONE: C64 = C64::new(1.0, 0.0);
 const FRAC2: C64 = C64::new(FRAC_1_SQRT_2, 0.0);
-
-pub struct PowerOfTwo(usize);
-impl From<usize> for PowerOfTwo {
-    fn from(u: usize) -> Self {
-        assert!(u.is_power_of_two());
-
-        Self(u)
-    }
-}
-
-impl PowerOfTwo {
-    fn index(&self) -> usize {
-        self.0.trailing_zeros().try_into().unwrap()
-    }
-}
 
 /// A quantum computer prepared with a number of qubits. The quantum computer does not store qubits
 /// individually, but rather stores the complex amplitudes associated to each basis state (for the
@@ -74,8 +65,10 @@ impl QuantumComputer {
         QuantumComputer { amplitudes, n }
     }
 
-    fn apply_single_qubit_operator(&mut self, target: PowerOfTwo, op: C64Matrix) {
-        let op = helpers::build_single_qubit_operator_matrix(op, self.n, target);
+    fn apply_operator(&mut self, target: u8, op: C64Matrix) {
+        assert!(target < self.n);
+
+        let op = helpers::build_operator_matrix(op, self.n, target);
 
         let mut amps = C64Vector::zeros(0);
         swap(&mut amps, &mut self.amplitudes);
@@ -83,17 +76,17 @@ impl QuantumComputer {
     }
 
     /// Quantum NOT operator. Applies to the single qubit specified by `target`.
-    pub fn not<T: Into<PowerOfTwo>>(&mut self, target: T) {
-        self.apply_single_qubit_operator(
-            target.into(),
+    pub fn not(&mut self, target: u8) {
+        self.apply_operator(
+            target,
             C64Matrix::from_row_slice(2, 2, &[ZERO, ONE, ONE, ZERO]),
         );
     }
 
     /// Quantum HAD operator (Hadamard gate). Applies to the single qubit specified by `target`.
-    pub fn had<T: Into<PowerOfTwo>>(&mut self, target: T) {
-        self.apply_single_qubit_operator(
-            target.into(),
+    pub fn had(&mut self, target: u8) {
+        self.apply_operator(
+            target,
             C64Matrix::from_row_slice(2, 2, &[FRAC2, FRAC2, FRAC2, -FRAC2]),
         );
     }
@@ -169,45 +162,37 @@ impl QuantumComputer {
             self.not(target);
         }
     }
+    */
 
-    /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>. Applies to the qubits specified by
-    /// `target`.
-    pub fn phase<T: Into<QubitTarget>>(&mut self, angle: f64, target: T) {
-        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
-            q.1 = (Complex::i() * angle).exp() * q.1;
-        });
+    /// Quantum PHASE operator. Maps |1> to e^{i \phi} |1>. Applies to `target`.
+    pub fn phase(&mut self, angle: f64, target: u8) {
+        self.apply_operator(
+            target,
+            C64Matrix::from_row_slice(2, 2, &[ONE, ZERO, ZERO, (C64::i() * angle).exp()]),
+        );
     }
 
-    /// Quantum ROTX operator. Rotates in the X plane of the Bloch sphere. Applies to the qubits
-    /// specified by `target`.
-    pub fn rotx<T: Into<QubitTarget>>(&mut self, angle: f64, target: T) {
-        let (f1, f2) = helpers::half_angle_factors(angle);
+    /// Quantum ROTX operator. Rotates in the X plane of the Bloch sphere. Applies to `target`.
+    pub fn rotx(&mut self, angle: f64, target: u8) {
+        let (cos, sin) = helpers::half_angle_factors(angle);
 
-        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
-            let tmp = q.0;
-            q.0 = (f1 * q.0) + (-Complex::i() * f2 * q.1);
-            q.1 = (-Complex::i() * f2 * tmp) + (f1 * q.1);
-
-            q.0 *= Complex::i();
-            q.1 *= Complex::i();
-        });
+        self.apply_operator(
+            target,
+            C64Matrix::from_row_slice(2, 2, &[cos, sin * -C64::i(), sin * -C64::i(), cos]),
+        );
     }
 
-    /// Quantum ROTY operator. Rotates in the Y plane of the Bloch sphere. Applies to the qubits
-    /// specified by `target`.
-    pub fn roty<T: Into<QubitTarget>>(&mut self, angle: f64, target: T) {
-        let (f1, f2) = helpers::half_angle_factors(angle);
+    /// Quantum ROTY operator. Rotates in the Y plane of the Bloch sphere. Applies to `target`.
+    pub fn roty(&mut self, angle: f64, target: u8) {
+        let (cos, sin) = helpers::half_angle_factors(angle);
 
-        helpers::bitmask_for_each(target, self.qs.iter_mut(), |q, _| {
-            let tmp = q.0;
-            q.0 = (f1 * q.0) + (-f2 * q.1);
-            q.1 = (f2 * tmp) + (f1 * q.1);
-
-            q.0 *= Complex::i();
-            q.1 *= Complex::i();
-        });
+        self.apply_operator(
+            target,
+            C64Matrix::from_row_slice(2, 2, &[cos, -sin, sin, cos]),
+        );
     }
 
+    /*
     /// Quantum ROOT-of-NOT operator. Two applications should equal a NOT. Applies to all qubits
     /// specified by `target`.
     pub fn root_of_not<T: Into<QubitTarget>>(&mut self, target: T) {
@@ -261,14 +246,14 @@ mod tests {
     #[test]
     fn not() {
         let mut qc = QuantumComputer::reset(1);
-        qc.not(0b1);
+        qc.not(0);
         assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]));
 
         // the amplitudes I'm using here aren't realizable, but they do demonstrate the appropriate
         // swapping of states
         let mut qc = QuantumComputer::reset(2);
         qc.amplitudes = C64Vector::from_column_slice(&[ONE, ONE, ZERO, ONE]);
-        qc.not(0b1);
+        qc.not(0);
         assert_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[ONE, ONE, ONE, ZERO])
@@ -278,14 +263,14 @@ mod tests {
         // swapping of states
         let mut qc = QuantumComputer::reset(2);
         qc.amplitudes = C64Vector::from_column_slice(&[ONE, ONE, ZERO, ONE]);
-        qc.not(0b10);
+        qc.not(1);
         assert_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[ZERO, ONE, ONE, ONE])
         );
 
         let mut qc = QuantumComputer::reset(3);
-        qc.not(0b100);
+        qc.not(2);
         assert_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[ZERO, ZERO, ZERO, ZERO, ONE, ZERO, ZERO, ZERO])
@@ -295,12 +280,12 @@ mod tests {
     #[test]
     fn had() {
         let mut qc = QuantumComputer::reset(1);
-        qc.had(0b1);
+        qc.had(0);
         assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[FRAC2, FRAC2]));
 
         qc = QuantumComputer::reset(1);
-        qc.not(0b1);
-        qc.had(0b1);
+        qc.not(0);
+        qc.had(0);
         assert_eq!(
             qc.amplitudes,
             C64Vector::from_column_slice(&[FRAC2, -FRAC2])
@@ -347,49 +332,42 @@ mod tests {
         qc.write_deterministic(0b1, 1, 0.49);
         assert_eq!(qc.amplitudes, vec![zero, one, zero, zero]);
     }
+    */
 
     #[test]
     fn phase() {
         let mut qc = QuantumComputer::reset(1);
-        qc.had(0b1);
-        qc.phase(FRAC_PI_4, 0b1);
-        assert_eq!(qc.qs[0].read(0.49), Binary::Zero);
+        qc.phase(FRAC_PI_4, 0);
+        assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ONE, ZERO]));
 
+        let EPI4: C64 = (C64::i() * FRAC_PI_4).exp();
         let mut qc = QuantumComputer::reset(1);
-        qc.had(0b1);
-        qc.phase(FRAC_PI_4, 0b1);
-        assert_eq!(qc.qs[0].read(0.51), Binary::One);
-
-        let mut qc = QuantumComputer::reset(1);
-        qc.had(0b1);
-        qc.phase(FRAC_PI_4, 0b1);
-
+        qc.had(0);
+        qc.phase(FRAC_PI_4, 0);
         assert_eq!(
-            qc.qs[0],
-            Qubit(
-                Complex::new(FRAC_1_SQRT_2, 0.0),
-                (Complex::i() * FRAC_PI_4).exp() * Complex::new(FRAC_1_SQRT_2, 0.0)
-            )
+            qc.amplitudes,
+            C64Vector::from_column_slice(&[FRAC2, FRAC2 * EPI4])
         );
     }
 
     #[test]
     fn rotx() {
         let mut qc = QuantumComputer::reset(1);
-        qc.rotx(PI, 0b1);
-        assert_eq!(qc.qs[0], Qubit::one());
+        qc.rotx(PI, 0);
+        assert_eq!(qc.amplitudes, C64Vector::from_column_slice(&[ZERO, ONE]));
     }
 
     #[test]
     fn roty() {
         let mut qc = QuantumComputer::reset(1);
-        qc.roty(PI, 0b1);
+        qc.roty(PI, 0);
         assert_eq!(
-            qc.qs[0],
-            Qubit(Complex::new(0.0, 0.0), Complex::new(0.0, 1.0))
+            qc.amplitudes,
+            C64Vector::from_column_slice(&[ZERO, C64::i()]),
         );
     }
 
+    /*
     #[test]
     fn root_of_not() {
         let mut qc = QuantumComputer::reset(1);
